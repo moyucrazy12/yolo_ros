@@ -9,6 +9,10 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from yolo_msgs.srv import SetClasses
 from rcl_interfaces.srv import SetParameters
 from rclpy.parameter import Parameter
+from yolo_msgs.msg import DetectionArray, Detection
+from geometry_msgs.msg import Point, QuaternionStamped
+from tf_transformations import quaternion_from_euler
+import math
 
 from smarc_action_base.gentler_action_server import GentlerActionServer
 
@@ -25,6 +29,25 @@ class YoloActionServer:
 
         self._node.declare_parameter('set_parameter_serivce', "/yolo/yolo_node/set_parameters")
         set_parameter_serivce_name = self._node.get_parameter('set_parameter_serivce').value
+
+        self._node.declare_parameter('yolo_tracking_topic', "/yolo/tracking")
+        yolo_tracking_topic = self._node.get_parameter('yolo_tracking_topic').value
+
+        self._node.declare_parameter('image_poi_output', "/yolo/tracked_poi")
+        image_poi_output = self._node.get_parameter('image_poi_output').value
+
+        self._node.declare_parameter('camera_aperture', 60.0)
+        self.camera_aperture = self._node.get_parameter('camera_aperture').get_parameter_value().double_value
+
+        self._node.declare_parameter('camera_frame_id', "evolo/z1_camera_link")
+        self.camera_frame_id = self._node.get_parameter('camera_frame_id').value
+
+        #subscribers
+        self.tracking_id = None # id of detection to track
+        self.tracking_subscriber = node.create_subscription(DetectionArray, yolo_tracking_topic, self.yolo_tracking_cb, 10)
+
+        #publishers
+        self.image_poi_publisher = node.create_publisher(QuaternionStamped, image_poi_output, 10)
 
         #Service clients
         self.set_classes_client = self._node.create_client(SetClasses, set_classes_serivce_name, callback_group=self.service_callback_group)
@@ -93,8 +116,6 @@ class YoloActionServer:
         except Exception as e:
             self._node.get_logger().error(f'Service call failed: {e}')
 
-
-
     def timer_cb(self):
         self._node.get_logger().warn(f"Timer callback")
         
@@ -133,6 +154,41 @@ class YoloActionServer:
             # Clear request so we donn't call the service next time
             self.set_threshold_request = None
            
+    def yolo_tracking_cb(self, msg : DetectionArray):
+
+        detection_to_track = None
+
+        if(self.tracking_id == None): #track detection with the highest confidence
+            detection : Detection
+            for detection in msg.detections:
+                if detection_to_track == None: detection_to_track = detection
+                if(detection.score > detection_to_track.score): detection_to_track = detection
+
+        if(detection_to_track != None):
+
+            #Mask is the resolution of the image
+            IMAGE_SIZE = (detection_to_track.mask.width,detection_to_track.mask.height)
+
+            #math
+            pixel_error_x = detection_to_track.bbox.center.position.x - 0.5*IMAGE_SIZE[0]
+            pixel_error_y = detection_to_track.bbox.center.position.y - 0.5*IMAGE_SIZE[1]
+            angle_per_pixel = math.radians(self.camera_aperture) / IMAGE_SIZE[0]
+
+            roll = 0
+            yaw_from_center = -1.0 * pixel_error_x * angle_per_pixel
+            pitch_from_center = -1.0 * pixel_error_y * angle_per_pixel
+
+            qx, qy, qz, qw = quaternion_from_euler(roll, pitch_from_center, yaw_from_center)
+
+            poi_msg = QuaternionStamped()
+            poi_msg.header.stamp = self._node.get_clock().now().to_msg()
+            poi_msg.header.frame_id = self.camera_frame_id
+            poi_msg.quaternion.x = qx
+            poi_msg.quaternion.y = qy
+            poi_msg.quaternion.z = qz
+            poi_msg.quaternion.w = qw
+
+            self.image_poi_publisher.publish(poi_msg)
 
     def _on_goal_received_classes(self, goal_request: dict) -> bool:
         """
