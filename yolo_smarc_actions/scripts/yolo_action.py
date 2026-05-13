@@ -36,7 +36,7 @@ class YoloActionServer:
         self._node.declare_parameter('image_poi_output', "/yolo/tracked_poi")
         image_poi_output = self._node.get_parameter('image_poi_output').value
 
-        self._node.declare_parameter('camera_aperture', 60.0)
+        self._node.declare_parameter('camera_aperture', 50.0)
         self.camera_aperture = self._node.get_parameter('camera_aperture').get_parameter_value().double_value
 
         self._node.declare_parameter('camera_frame_id', "evolo/z1_camera_link")
@@ -106,7 +106,7 @@ class YoloActionServer:
 
         timer = node.create_timer(1.0 , self.timer_cb, callback_group=self.timer_callback_group)
 
-        self._node.get_logger().warn(f"YoloServer initialized.")
+        self._node.get_logger().info(f"YoloServer initialized.")
 
     #Callback server for printing the result of a service call
     def service_callback_response(self, future):
@@ -176,7 +176,7 @@ class YoloActionServer:
 
             roll = 0
             yaw_from_center = -1.0 * pixel_error_x * angle_per_pixel
-            pitch_from_center = -1.0 * pixel_error_y * angle_per_pixel
+            pitch_from_center = 1.0 * pixel_error_y * angle_per_pixel
 
             qx, qy, qz, qw = quaternion_from_euler(roll, pitch_from_center, yaw_from_center)
 
