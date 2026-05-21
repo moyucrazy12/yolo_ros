@@ -243,7 +243,7 @@ class DebugNode(LifecycleNode):
         label += " ({:.3f})".format(score)
         pos = (min_pt[0] + 5, min_pt[1] + 25)
         font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(cv_image, label, pos, font, 1, color, 1, cv2.LINE_AA)
+        cv2.putText(cv_image, label, pos, font, 1.5, color, 3, cv2.LINE_AA)
 
         return cv_image
 
@@ -452,7 +452,7 @@ class DebugNode(LifecycleNode):
             color = self._class_to_color[class_name]
 
             cv_image = self.draw_box(cv_image, detection, color)
-            cv_image = self.draw_mask(cv_image, detection, color)
+            #cv_image = self.draw_mask(cv_image, detection, color)
             cv_image = self.draw_keypoints(cv_image, detection)
 
             if detection.bbox3d.frame_id:
